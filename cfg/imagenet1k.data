@@ -1,7 +1,7 @@
 classes=1000
-train  = /data/imagenet/imagenet1k.train.list
-valid  = /data/imagenet/imagenet1k.valid.list
-backup = /home/pjreddie/backup/
+train  = data/inet.val.list
+valid  = data/inet.val.list
+backup = /home/schuler/Repositories/darknet/backup/
 labels = data/imagenet.labels.list
 names  = data/imagenet.shortnames.list
 top=5
