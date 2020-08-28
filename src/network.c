@@ -31,6 +31,7 @@
 #include "shortcut_layer.h"
 #include "parser.h"
 #include "data.h"
+#include "ilp_solver.h"
 
 load_args get_base_args(network *net)
 {
@@ -182,6 +183,8 @@ network *make_network(int n)
     net->seen = calloc(1, sizeof(size_t));
     net->t    = calloc(1, sizeof(int));
     net->cost = calloc(1, sizeof(float));
+    net->ilp  = calloc(1, sizeof(ilp_solver));
+    init_ilp_solver(net->ilp, net->n);
     return net;
 }
 
@@ -194,17 +197,25 @@ void forward_network(network *netp)
     }
 #endif
     network net = *netp;
-    int i;
-    for(i = 0; i < net.n; ++i){
-        net.index = i;
-        layer l = net.layers[i];
-        if(l.delta){
-            fill_cpu(l.outputs * l.batch, 0, l.delta, 1);
-        }
-        l.forward(l, net);
-        net.input = l.output;
-        if(l.truth) {
-            net.truth = l.output;
+    ilp_solver *ilp = net.ilp;
+    print_ilp_matrices(ilp);
+    int t, i;
+    for(t = 0; t < ilp->r.rows; ++t){
+        for (i = 0; i < ilp->r.cols; ++i){
+            if (ilp->r.vals[t][i] < 1){
+                continue;
+            } else {
+                net.index = i;
+                layer l = net.layers[i];
+                if(l.delta){
+                    fill_cpu(l.outputs * l.batch, 0, l.delta, 1);
+                }
+                l.forward(l, net);
+                net.input = l.output;
+                if(l.truth) {
+                    net.truth = l.output;
+                }
+            }
         }
     }
     calc_network_cost(netp);
@@ -767,20 +778,27 @@ void forward_network_gpu(network *netp)
     if(net.truth){
         cuda_push_array(net.truth_gpu, net.truth, net.truths*net.batch);
     }
-
-    int i;
-    for(i = 0; i < net.n; ++i){
-        net.index = i;
-        layer l = net.layers[i];
-        if(l.delta_gpu){
-            fill_gpu(l.outputs * l.batch, 0, l.delta_gpu, 1);
-        }
-        l.forward_gpu(l, net);
-        net.input_gpu = l.output_gpu;
-        net.input = l.output;
-        if(l.truth) {
-            net.truth_gpu = l.output_gpu;
-            net.truth = l.output;
+    ilp_solver *ilp = net.ilp;
+    print_ilp_matrices(ilp);
+    int t, i;
+    for(t = 0; t < ilp->r.rows; ++t){
+        for(i = 0; i < ilp->r.cols; ++i){
+            if (ilp->r.vals[t][i] < 1){
+                continue;
+            } else {
+                net.index = i;
+                layer l = net.layers[i];
+                if(l.delta_gpu){
+                    fill_gpu(l.outputs * l.batch, 0, l.delta_gpu, 1);
+                }
+                l.forward_gpu(l, net);
+                net.input_gpu = l.output_gpu;
+                net.input = l.output;
+                if(l.truth) {
+                    net.truth_gpu = l.output_gpu;
+                    net.truth = l.output;
+                }
+            }
         }
     }
     pull_network_output(netp);

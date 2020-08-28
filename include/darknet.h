@@ -106,6 +106,9 @@ typedef struct{
     int t;
 } update_args;
 
+struct ilp_solver;
+typedef struct ilp_solver ilp_solver;
+
 struct network;
 typedef struct network network;
 
@@ -427,6 +430,16 @@ typedef enum {
     CONSTANT, STEP, EXP, POLY, STEPS, SIG, RANDOM
 } learning_rate_policy;
 
+typedef struct matrix{
+    int rows, cols;
+    float **vals;
+} matrix;
+
+typedef struct ilp_solver{
+    matrix r;
+    matrix s;
+} ilp_solver;
+
 typedef struct network{
     int n;
     int batch;
@@ -493,6 +506,8 @@ typedef struct network{
     float *output_gpu;
 #endif
 
+    ilp_solver *ilp;
+
 } network;
 
 typedef struct {
@@ -524,12 +539,6 @@ typedef struct detection{
     float objectness;
     int sort_class;
 } detection;
-
-typedef struct matrix{
-    int rows, cols;
-    float **vals;
-} matrix;
-
 
 typedef struct{
     int w, h;
@@ -659,6 +668,8 @@ data concat_data(data d1, data d2);
 data load_cifar10_data(char *filename);
 float matrix_topk_accuracy(matrix truth, matrix guess, int k);
 void matrix_add_matrix(matrix from, matrix to);
+void fill_matrix(matrix m, float value);
+void fill_matrix_eye(matrix m);
 void scale_matrix(matrix m, float scale);
 matrix csv_to_matrix(char *filename);
 float *network_accuracies(network *net, data d, int n);
@@ -798,6 +809,9 @@ int *read_intlist(char *s, int *n, int d);
 size_t rand_size_t();
 float rand_normal();
 float rand_uniform(float min, float max);
+
+void init_ilp_solver(ilp_solver *ilp, int n);
+void print_ilp_matrices(ilp_solver *ilp);
 
 #ifdef __cplusplus
 }

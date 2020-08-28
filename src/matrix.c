@@ -34,6 +34,30 @@ float matrix_topk_accuracy(matrix truth, matrix guess, int k)
     return (float)correct/truth.rows;
 }
 
+void fill_matrix(matrix m, float value)
+{
+    int i,j;
+    for(i = 0; i < m.rows; ++i){
+        for(j = 0; j < m.cols; ++j){
+            m.vals[i][j] = value;
+        }
+    }
+}
+
+void fill_matrix_eye(matrix m)
+{
+    int i,j;
+    for(i = 0; i < m.rows; ++i){
+        for(j = 0; j < m.cols; ++j){
+            if (i == j) {
+                m.vals[i][j] = 1.0;
+            } else {
+                m.vals[i][j] = 0.0;
+            }
+        }
+    }
+}
+
 void scale_matrix(matrix m, float scale)
 {
     int i,j;
