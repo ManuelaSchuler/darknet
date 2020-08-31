@@ -17,6 +17,10 @@
     #endif
 #endif
 
+#ifdef GLPK_ILP
+    #include <glpk.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
