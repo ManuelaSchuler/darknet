@@ -4,6 +4,7 @@ OPENCV=0
 OPENMP=0
 DEBUG=0
 GLPK_ILP=0
+GUROBI_ILP=1
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \
@@ -34,6 +35,12 @@ ifeq ($(GLPK_ILP), 1)
 COMMON+= -DGLPK_ILP
 CFLAGS+= -DGLPK_ILP
 LDFLAGS+= -lglpk
+endif
+
+ifeq ($(GUROBI_ILP), 1)
+COMMON+= -DGUROBI_ILP
+CFLAGS+= -DGUROBI_ILP
+LDFLAGS+= -lgurobi90
 endif
 
 ifeq ($(OPENMP), 1) 

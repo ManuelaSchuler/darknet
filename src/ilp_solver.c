@@ -1,92 +1,121 @@
 #include "ilp_solver.h"
 
-#ifdef GLPK_ILP
-int solve_checkpoint_ilp(){
-    glp_prob *mip = glp_create_prob();
-    glp_set_prob_name(mip, "checkpoint_mip");
-    glp_set_obj_dir(mip, GLP_MIN);
-    // TODO: Problem statement
-    glp_iocp parm;
-    glp_init_iocp(&parm);
-    parm.presolve = GLP_ON;
-    int err = glp_intopt(mip, &parm);
-    printf("err: %i", err);
-
-    glp_delete_prob(mip);
-    return 0;
+int getLengthOfInt(int i){
+    return snprintf( NULL, 0, "%d", i );
 }
 
-int solve_example_ilp(){
-/*
-    https://gist.github.com/msakai/2450935
-    Maximize
-        obj: x1 + 2 x2 + 3 x3 + x4
-    Subject To
-        c1: - x1 + x2 + x3 + 10 x4 <= 20
-        c2: x1 - 3 x2 + x3 <= 30
-        c3: x2 - 3.5 x4 = 0
-    Bounds
-        0 <= x1 <= 40
-        2 <= x4 <= 3
-    General
-        x4
-    End
-*/
-    glp_prob *mip = glp_create_prob();
-    glp_set_prob_name(mip, "example_ilp");
-    glp_set_obj_dir(mip, GLP_MAX);
+int getLengthForVarName(int t, int i){
+    // format: %c [ %d , %d ]
+    // extra chars for:
+    //       type [ , ]
+    int extra_chars = 4;
+    return getLengthOfInt(t) + getLengthOfInt(i) + extra_chars + 1;
+}
 
-    glp_add_rows(mip, 3);
-    glp_set_row_name(mip, 1, "c1");
-    glp_set_row_bnds(mip, 1, GLP_UP, 0.0, 20.0);
-    glp_set_row_name(mip, 2, "c2");
-    glp_set_row_bnds(mip, 2, GLP_UP, 0.0, 30.0);
-    glp_set_row_name(mip, 3, "c3");
-    glp_set_row_bnds(mip, 3, GLP_FX, 0.0, 0);
+float getCosts(int i){
+    // TODO: return costs of node i
+    return 1.0;
+}
+#ifdef GUROBI_ILP
+int solve_checkpoint_ilp(ilp_solver *ilp, float const budget){
+    GRBenv   *env   = NULL;
+    GRBmodel *model = NULL;
+    int       error = 0;
+    int       optimstatus;
+    double    objval;
 
-    glp_add_cols(mip, 4);
-    glp_set_col_name(mip, 1, "x1");
-    glp_set_col_bnds(mip, 1, GLP_DB, 0.0, 40.0);
-    glp_set_obj_coef(mip, 1, 1.0);
-    glp_set_col_name(mip, 2, "x2");
-    glp_set_col_bnds(mip, 2, GLP_LO, 0.0, 0.0);
-    glp_set_obj_coef(mip, 2, 2.0);
-    glp_set_col_name(mip, 3, "x3");
-    glp_set_col_bnds(mip, 3, GLP_LO, 0.0, 0.0);
-    glp_set_obj_coef(mip, 3, 3.0);
-    glp_set_col_name(mip, 4, "x4");
-    glp_set_col_bnds(mip, 4, GLP_DB, 2.0, 3.0);
-    glp_set_obj_coef(mip, 4, 1.0);
-    glp_set_col_kind(mip, 4, GLP_IV);
+    int t,i,idx;
+    int T = ilp->r.cols;
+    float ram = 4e6;
+    double gcd = budget/ram;
+    int E = T;
 
-    int ia[1+9], ja[1+9];
-    double ar[1+9];
-    ia[1]=1,ja[1]=1,ar[1]=-1;   // a[1,1] = -1
-    ia[2]=1,ja[2]=2,ar[2]=1;    // a[1,2] = 1
-    ia[3]=1,ja[3]=3,ar[3]=1;    // a[1,3] = 1
-    ia[4]=1,ja[4]=4,ar[4]=10;   // a[1,4] = 10
-    ia[5]=2,ja[5]=1,ar[5]=1;    // a[2,1] = 1
-    ia[6]=2,ja[6]=2,ar[6]=-3;   // a[2,2] = -3
-    ia[7]=2,ja[7]=3,ar[7]=1;    // a[2,3] = 1
-    ia[8]=3,ja[8]=2,ar[8]=1;    // a[3,2] = 1
-    ia[9]=3,ja[9]=4,ar[9]=-3.5; // a[3,4] = -3.5
-    glp_load_matrix(mip, 9, ia, ja, ar);
+    double    obj[T*T];
+    char      vtype[T*T];
+    char*     names[T*T];
+    double    sol[T*T];
+    double    lb[T*T];
+    double    ub[T*T];
+    int       beg[T*T];
+    int       ind[T*T];
+    double    val[T*T];
 
-    glp_iocp parm;
-    glp_init_iocp(&parm);
-    parm.presolve = GLP_ON;
-    int err = glp_intopt(mip, &parm);
-    printf("err: %i", err);
+    error = GRBemptyenv(&env);
+    if (error) goto QUIT;
+    error = GRBsetstrparam(env, "LogFile", "checkpoint_ilp.log");
+    if (error) goto QUIT;
+    error = GRBstartenv(env);
+    if (error) goto QUIT;
+    error = GRBnewmodel(env, &model, "checkpoint_ilp", 0, NULL, NULL, NULL, NULL, NULL);
+    if (error) goto QUIT;
+    error = GRBsetintattr(model, GRB_INT_ATTR_MODELSENSE, GRB_MINIMIZE);
+    if (error) goto QUIT;
 
-    double z = glp_mip_obj_val(mip);
-    double x1 = glp_mip_col_val(mip, 1);
-    double x2 = glp_mip_col_val(mip, 2);
-    double x3 = glp_mip_col_val(mip, 3);
-    double x4 = glp_mip_col_val(mip, 4);
-    printf("\nz = %g; x1 = %g; x2 = %g; x3 = %g, x4 = %g\n", z, x1, x2, x3, x4);
-    // z = 122.5; x1 = 40; x2 = 10.5; x3 = 19.5, x4 = 3
+    /* R */
+    for (t = 0 ; t < T; ++t){
+        for (i = 0 ; i < T; ++i){
+            idx = (t*T) +i;
+            vtype[idx] = GRB_BINARY;
+            int l = getLengthForVarName(t, i);
+            names[idx] = malloc(l);
+            snprintf( names[idx], l, "%c[%d,%d]", 'R', t, i );
+            obj[idx] = getCosts(i);
+        }
+    }
+    error = GRBaddvars(model, T*T, 0, NULL, NULL, NULL, obj, NULL, NULL, vtype, names);
+    if (error) goto QUIT;
+    /* S */
+    for (i = 0 ; i < T*T; ++i){
+        names[i][0] = 'S';
+    }
+    error = GRBaddvars(model, T*T, 0, NULL, NULL, NULL, NULL, NULL, NULL, vtype, names);
+    if (error) goto QUIT;
+    /* F */
+    for (i = 0 ; i < T*E; ++i){
+        names[i][0] = 'F';
+    }
+    error = GRBaddvars(model, T*E, 0, NULL, NULL, NULL, NULL, NULL, NULL, vtype, names);
+    if (error) goto QUIT;
+    /* U */
+    for (i = 0 ; i < T*T; ++i){
+        vtype[i] = GRB_CONTINUOUS;
+        lb[i] = 0.0;
+        ub[i] = gcd;
+        names[i][0] = 'U';
+    }
+    error = GRBaddvars(model, T*T, 0, NULL, NULL, NULL, NULL, lb, ub, vtype, names);
+    if (error) goto QUIT;
 
-    glp_delete_prob(mip);
+
+
+    error = GRBoptimize(model);
+    if (error) goto QUIT;
+    error = GRBwrite(model, "checkpoint_ilp.lp");
+    if (error) goto QUIT;
+    // Capture solution information
+    error = GRBgetintattr(model, GRB_INT_ATTR_STATUS, &optimstatus);
+    if (error) goto QUIT;
+    error = GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &objval);
+    if (error) goto QUIT;
+    printf("\nOptimization complete\n");
+    if (optimstatus == GRB_OPTIMAL) {
+        printf("Optimal objective: %.4e\n", objval);
+        printf("\n");
+    } else if (optimstatus == GRB_INF_OR_UNBD) {
+        printf("Model is infeasible or unbounded\n");
+    } else {
+        printf("Optimization was stopped early\n");
+    }
+QUIT:
+    if (error) {
+        printf("ERROR: %s\n", GRBgeterrormsg(env));
+        exit(1);
+    }
+    for (i = 0 ; i < T*T; ++i){
+        free(names[i]);
+    }
+    GRBfreemodel(model);
+    GRBfreeenv(env);
     return 0;
 }
 #endif
@@ -98,7 +127,7 @@ void init_ilp_solver(ilp_solver* ilp, int n){
     fill_matrix(ilp->s, 0.0);
 }
 
-void print_int_matrix(matrix m)
+void print_int_matrix(matrix const m)
 {
     int i, j;
     printf("%d X %d Matrix:\n",m.rows, m.cols);

@@ -198,7 +198,8 @@ void forward_network(network *netp)
 #endif
     network net = *netp;
     ilp_solver *ilp = net.ilp;
-    print_ilp_matrices(ilp);
+    float budget = 200e6;
+    solve_checkpoint_ilp(ilp, budget);
     int t, i;
     for(t = 0; t < ilp->r.rows; ++t){
         for (i = 0; i < ilp->r.cols; ++i){
