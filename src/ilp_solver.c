@@ -51,17 +51,21 @@ int solve_checkpoint_ilp(ilp_solver *ilp, float const budget){
     GRBmodel *model = NULL;
     int       error = 0;
     int       optimstatus;
+    int       sol_count;
     double    objval;
 
     int t,i,idx,offset,counter;
     int T = ilp->r.cols;
     float ram = 1;
     double gcd = budget/ram;
+    int E = T;
+    struct edge **edges = get_edge_list(T, E);
 
     double    obj[T*T];
     char      vtype[T*T];
     char*     names[T*T];
-    double    sol[T*T];
+    double    r_sol[T*T];
+    double    s_sol[T*T];
     double    lb[T*T];
     double    ub[T*T];
     int       beg[T*T];
@@ -69,9 +73,6 @@ int solve_checkpoint_ilp(ilp_solver *ilp, float const budget){
     int       r_ind[T*T];
     int       s_ind[T*T];
     double    val[T*T];
-
-    int E = T;
-    struct edge **edges = get_edge_list(T, E);
 
     error = GRBemptyenv(&env);
     if (error) goto QUIT;
@@ -180,7 +181,6 @@ int solve_checkpoint_ilp(ilp_solver *ilp, float const budget){
         }
     }
 
-
     error = GRBoptimize(model);
     if (error) goto QUIT;
     error = GRBwrite(model, "checkpoint_ilp.lp");
@@ -190,10 +190,21 @@ int solve_checkpoint_ilp(ilp_solver *ilp, float const budget){
     if (error) goto QUIT;
     error = GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &objval);
     if (error) goto QUIT;
+    error = GRBgetintattr(model, GRB_INT_ATTR_SOLCOUNT, &sol_count);
+    if (error) goto QUIT;
+    error = GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, T*T, r_sol);
+    if (error) goto QUIT;
+    error = GRBgetdblattrarray(model, GRB_DBL_ATTR_X, T*T, T*T, s_sol);
+    if (error) goto QUIT;
     printf("\nOptimization complete\n");
     if (optimstatus == GRB_OPTIMAL) {
         printf("Optimal objective: %.4e\n", objval);
-        printf("\n");
+        for (t = 0 ; t < T; ++t){
+            for (i = 0 ; i < T; ++i){
+                ilp->r.vals[t][i] = (int)r_sol[(t*T)+i];
+                ilp->s.vals[t][i] = (int)s_sol[(t*T)+i];
+            }
+        }
     } else if (optimstatus == GRB_INF_OR_UNBD) {
         printf("Model is infeasible or unbounded\n");
     } else {
@@ -218,24 +229,26 @@ QUIT:
 void init_ilp_solver(ilp_solver* ilp, int n){
     ilp->r = make_matrix(n,n);
     ilp->s = make_matrix(n,n);
-    fill_matrix_eye(ilp->r);
-    fill_matrix(ilp->s, 0.0);
 }
 
-void print_int_matrix(matrix const m)
+void print_ilp_matrix(matrix const m)
 {
-    int i, j;
+    int i, j, value;
     printf("%d X %d Matrix:\n",m.rows, m.cols);
     for(i = 0; i < m.rows; ++i){
         printf("|  ");
         for(j = 0; j < m.cols; ++j){
-            printf("%i ", (int)(m.vals[i][j]+0.5f));
+            value = (int)(m.vals[i][j]+0.5f);
+            if (value == 1)
+                printf("\u2588");
+            else
+                printf(" ");
         }
         printf(" |\n");
     }
 }
 
 void print_ilp_matrices(ilp_solver *ilp){
-    print_int_matrix(ilp->r);
-    print_int_matrix(ilp->s);
+    print_ilp_matrix(ilp->r);
+    print_ilp_matrix(ilp->s);
 }
